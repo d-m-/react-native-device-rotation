@@ -4,7 +4,7 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.support.annotation.Nullable;
+import androidx.annotation.Nullable;
 import android.util.Log;
 
 import com.facebook.react.bridge.Arguments;
@@ -15,8 +15,7 @@ import com.facebook.react.modules.core.DeviceEventManagerModule;
 
 public class DeviceRotation implements SensorEventListener {
     private SensorManager mSensorManager;
-    private Sensor mAccelerometer;
-    private Sensor mMagnetometer;
+    private Sensor mRotationVector;
     private boolean isRegistered = false;
 
     private ReactContext mReactContext;
@@ -24,15 +23,13 @@ public class DeviceRotation implements SensorEventListener {
 
     public DeviceRotation(ReactApplicationContext reactContext) {
         mSensorManager = (SensorManager)reactContext.getSystemService(reactContext.SENSOR_SERVICE);
-        mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-        mMagnetometer = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+        mRotationVector = mSensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
         mReactContext = reactContext;
     }
 
     public boolean start() {
-        if (mAccelerometer != null && isRegistered == false) {
-            mSensorManager.registerListener(this, mAccelerometer, SensorManager.SENSOR_DELAY_UI);
-            mSensorManager.registerListener(this, mMagnetometer, SensorManager.SENSOR_DELAY_UI);
+        if (mRotationVector!= null && isRegistered == false) {
+            mSensorManager.registerListener(this, mRotationVector, SensorManager.SENSOR_DELAY_UI);
             isRegistered = true;
             return true;
         }
@@ -56,48 +53,39 @@ public class DeviceRotation implements SensorEventListener {
         }
     }
 
-    float[] mGravity;
-    float[] mGeomagnetic;
+    float[] mRotation;
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
         Sensor mySensor = sensorEvent.sensor;
         WritableMap map = Arguments.createMap();
 
-        if (mySensor.getType() == Sensor.TYPE_ACCELEROMETER)
-            mGravity = sensorEvent.values;
-        if (mySensor.getType() == Sensor.TYPE_MAGNETIC_FIELD)
-            mGeomagnetic = sensorEvent.values;
-        if (mGravity != null && mGeomagnetic != null) {
-            float R[] = new float[9];
-            float I[] = new float[9];
-            boolean success = mSensorManager.getRotationMatrix(R, I, mGravity, mGeomagnetic);
-            if (success) {
-                long curTime = System.currentTimeMillis();
-                float orientation[] = new float[3];
-                mSensorManager.getOrientation(R, orientation);
+        if (mySensor.getType() == Sensor.TYPE_ROTATION_VECTOR) {
+            mRotation = sensorEvent.values;
+            float[] rotationMatrix = new float[16];
+            float[] rotationMatrixTransformed = new float[16];
+            mSensorManager.getRotationMatrixFromVector(rotationMatrix, mRotation);
+            SensorManager.remapCoordinateSystem(
+                    rotationMatrix,
+                    SensorManager.AXIS_X,
+                    SensorManager.AXIS_Z,
+                    rotationMatrixTransformed
+                    );
+            float[] orientation = new float[3];
+            mSensorManager.getOrientation(rotationMatrixTransformed, orientation);
 
-                float heading = (float)((Math.toDegrees(orientation[0])) % 360.0f);
-                float pitch = (float)((Math.toDegrees(orientation[1])) % 360.0f);
-                float roll = (float)((Math.toDegrees(orientation[2])) % 360.0f);
-
-                if (heading < 0) {
-                    heading = 360 - (0 - heading);
-                }
-
-                if (pitch < 0) {
-                    pitch = 360 - (0 - pitch);
-                }
-
-                if (roll < 0) {
-                    roll = 360 - (0 - roll);
-                }
-
-                map.putDouble("azimuth", heading);
-                map.putDouble("pitch", pitch);
-                map.putDouble("roll", roll);
-                sendEvent("DeviceRotation", map);
+            float heading = (float)((Math.toDegrees(orientation[0])) % 360.0f);
+            float pitch = (float)((Math.toDegrees(orientation[1])) % 360.0f);
+            float roll = (float)((Math.toDegrees(orientation[2])) % 360.0f);
+            
+            if (heading < 0) {
+                heading = 360 - (0 - heading);
             }
+
+            map.putDouble("azimuth", heading);
+            map.putDouble("pitch", pitch);
+            map.putDouble("roll", roll);
+            sendEvent("DeviceRotation", map);
         }
     }
 
