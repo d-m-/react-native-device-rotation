@@ -85,6 +85,8 @@ public class DeviceRotation implements SensorEventListener {
             map.putDouble("azimuth", heading);
             map.putDouble("pitch", pitch);
             map.putDouble("roll", roll);
+            map.putDouble("accuracy", sensorEvent.accuracy);
+
             sendEvent("DeviceRotation", map);
         }
     }
